@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+from .exceptions import InvalidSentenceError
 from .models import PredictionRequest, PredictionResponse
 from .inference import aggregate_predictions
 
@@ -12,3 +15,14 @@ def predict_word(request: PredictionRequest):
         "sentences": request.sentences,
         "words": words,
     }
+
+
+@app.exception_handler(InvalidSentenceError)
+def handle_invalid_sentence_error(request, exc: InvalidSentenceError):
+    return JSONResponse(
+        status_code=400,
+        content={
+            "sentence": exc.sentence,
+            "message": str(exc),
+        }
+    )

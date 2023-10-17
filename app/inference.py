@@ -19,13 +19,6 @@ def predict_with_scores(sentence: str, n: int = 5) -> list[tuple[str, float]]:
         A list of tuples containing the predicted word and its score.
     """
     # Replace blank with <mask>
-    if "____" not in sentence:
-        raise ValueError("Sentence must contain [MASK] token for prediction")
-
-    # If there's more than one blank, raise an error
-    if sentence.count("____") > 1:
-        raise ValueError("Only one blank allowed per sentence")
-
     sentence = sentence.replace("____", "<mask>")
 
     # Tokenize the sentence
