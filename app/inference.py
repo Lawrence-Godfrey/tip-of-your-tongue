@@ -1,10 +1,10 @@
-from transformers import RobertaForMaskedLM, RobertaTokenizer
+from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 import torch
 
 
 # Load model and tokenizer
-model = RobertaForMaskedLM.from_pretrained("roberta-base")
-tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+model = DistilBertForMaskedLM.from_pretrained("distilbert-base-uncased")
+tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
 
 def predict_with_scores(sentence: str, n: int = 5) -> list[tuple[str, float]]:
@@ -19,7 +19,7 @@ def predict_with_scores(sentence: str, n: int = 5) -> list[tuple[str, float]]:
         A list of tuples containing the predicted word and its score.
     """
     # Replace blank with <mask>
-    sentence = sentence.replace("____", "<mask>")
+    sentence = sentence.replace("____", "[MASK]")
 
     # Tokenize the sentence
     input_ids = tokenizer(sentence, return_tensors="pt")["input_ids"]
@@ -29,12 +29,16 @@ def predict_with_scores(sentence: str, n: int = 5) -> list[tuple[str, float]]:
         prediction = model(input_ids).logits
 
     # Get predicted token IDs and their scores
-    masked_index = torch.where(input_ids == tokenizer.mask_token_id)[1].item()
+    masked_index = (input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
+
     top_n_token_ids = prediction[0, masked_index].topk(n).indices
+    top_n_token_ids = top_n_token_ids.squeeze()
+
     top_n_scores = prediction[0, masked_index].topk(n).values
+    top_n_scores = top_n_scores.squeeze()
 
     # Decode token IDs to words
-    top_n_words = [tokenizer.decode(token_id) for token_id in top_n_token_ids]
+    top_n_words = [tokenizer.decode(token_id).replace(' ', '') for token_id in top_n_token_ids]
 
     return list(zip(top_n_words, top_n_scores.tolist()))
 
