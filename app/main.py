@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from .exceptions import InvalidSentenceError
-from .models import PredictionRequest, PredictionResponse
-from .inference import aggregate_predictions
+from app.api.exceptions import InvalidSentenceError
+from app.api.models import PredictionRequest, PredictionResponse
+from inference.masking import aggregate_predictions
 
 app = FastAPI()
 
