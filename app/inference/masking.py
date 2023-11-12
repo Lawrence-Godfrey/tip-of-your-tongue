@@ -1,8 +1,6 @@
 from abc import abstractmethod
 from typing import List, Union
 
-import torch
-
 from app.clients.huggingface import HuggingFaceClient
 
 
@@ -157,6 +155,7 @@ class DistilBertBaseUncased(BaseMasking):
         self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
     def predict_word(self, sentence, n=5):
+        import torch
 
         # Replace blank with <mask>
         sentence = self.normalise_sentence(sentence)
@@ -200,6 +199,8 @@ class RobertaBase(LocalMaskingModel):
         self.tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 
     def predict_word(self, sentence: Union[str, List[str]], n: int = 5) -> List[tuple[str, float]]:
+
+        import torch
 
         # Replace blank with <mask>
         sentence = self.normalise_sentence(sentence)
