@@ -23,3 +23,4 @@ class PredictionRequest(BaseModel):
 
 class PredictionResponse(BaseModel):
     words: List[tuple[str, float]]
+    sentences: List[str]
