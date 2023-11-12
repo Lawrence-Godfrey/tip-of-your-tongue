@@ -1,6 +1,8 @@
-fastapi
+fastapi~=0.103.2
 transformers
-torch
-pydantic
+torch~=2.0.0.post103
+pydantic~=2.4.2
 uvicorn
 python-dotenv
+starlette~=0.27.0
+requests~=2.31.0
