@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import List
+from typing import List, Union
 
 import torch
 
@@ -13,7 +13,11 @@ def get_masked_language_model():
     load_dotenv()
 
     if os.getenv('MODEL_TYPE') == 'huggingface-api':
-        return HuggingFaceModel(os.getenv('HUGGINGFACE_API_URL'), os.getenv('HUGGINGFACE_API_KEY'))
+        return HuggingFaceModel(
+            os.getenv('HUGGINGFACE_API_URL'),
+            os.getenv('HUGGINGFACE_API_KEY'),
+            os.getenv('MODEL_NAME')
+        )
     elif os.getenv('MODEL_TYPE') == 'local':
         return LocalMaskingModel().get_model_from_name(os.getenv('MODEL_NAME'))
     else:
@@ -23,7 +27,7 @@ def get_masked_language_model():
 class BaseMasking:
 
     @abstractmethod
-    def predict_word(self, sentence: str or List[str], n: int = 5) -> List[tuple[str, float]]:
+    def predict_word(self, sentence: Union[str, List[str]], n: int = 5) -> List[tuple[str, float]]:
         """
         Predict the most likely word to fill in the blank for each sentence.
 
@@ -36,15 +40,89 @@ class BaseMasking:
         """
         pass
 
+    @abstractmethod
+    def normalise_sentence(self, sentence: Union[str, List[str]]) -> Union[str, List[str]]:
+        """
+        Normalise the sentence to be used by the model.
+
+        Args:
+            sentence: A sentence or list of sentences with a blank in it, represented by '[MASK]'.
+
+        Returns:
+            A normalised sentence.
+        """
+        pass
+
+    def aggregate_predictions(
+            self, predictions: Union[List[tuple[str, float]], List[List[tuple[str, float]]]], n: int = 5
+    ) -> List[tuple[str, float]]:
+        """
+        Aggregate the predictions into a list of tuples containing the predicted word and its probability.
+
+        Args:
+            predictions: A list of predictions, where each prediction is a list of tuples containing the predicted
+                word and its probability.
+            n: The number of predictions to return.
+
+        Returns:
+            A list of tuples containing the predicted word and its probability.
+        """
+
+        word_scores = {}
+
+        for prediction in predictions:
+            prediction = self.normalise_predictions(prediction)
+            for word, score in prediction:
+                if word in word_scores:
+                    word_scores[word] += score
+                else:
+                    word_scores[word] = score
+
+        # Return the first n words with the highest scores
+        return sorted(word_scores.items(), key=lambda x: x[1], reverse=True)[:n]
+
+    def normalise_predictions(self, predictions):
+        """
+        Normalise the scores of the predictions.
+
+        Args:
+            predictions: A list of tuples containing the predicted word and its score.
+
+        Returns:
+            A list of tuples containing the predicted word and its normalised score.
+        """
+        # Get the max score
+        max_score = max([score for _, score in predictions])
+
+        # Normalise the scores
+        return [(word, score / max_score) for word, score in predictions]
+
 
 class HuggingFaceModel(BaseMasking):
 
-    def __init__(self, api_url: str, api_key: str):
+    def __init__(self, api_url: str, api_key: str, model_name: str):
         self.api_url = api_url
         self.api_key = api_key
+        self.model_name = model_name
 
-    def predict_word(self, sentence: str or List[str], n: int = 5) -> List[tuple[str, float]]:
-        return HuggingFaceClient(self.api_url, self.api_key).predict_word(sentence)
+    def predict_word(self, sentence, n=5):
+        hf_client = HuggingFaceClient(self.api_url, self.api_key, self.model_name)
+        predictions = hf_client.predict_word(self.normalise_sentence(sentence))
+        return self.aggregate_predictions(predictions, n)
+
+    def normalise_sentence(self, sentence):
+        if isinstance(sentence, list):
+            return [s.replace('____', '[MASK]') for s in sentence]
+        else:
+            return sentence.replace('____', '[MASK]')
+
+    def aggregate_predictions(self, predictions: Union[List[dict], List[List[dict]]], n=5):
+        if not isinstance(predictions[0], list):
+            predictions = [predictions]
+
+        predictions = [[(p['token_str'], p['score']) for p in prediction] for prediction in predictions]
+
+        return super().aggregate_predictions(predictions, n)
 
 
 class LocalMaskingModel(BaseMasking):
@@ -64,62 +142,24 @@ class LocalMaskingModel(BaseMasking):
             raise ValueError('Invalid model name')
 
     @abstractmethod
-    def predict_word(self, sentence: str or List[str], n: int = 5) -> List[tuple[str, float]]:
+    def predict_word(self, sentence, n=5):
         pass
-
-    def aggregate_predictions(self, predictions: list, n: int = 5) -> list[tuple[str, float]]:
-        """
-        Aggregate the predictions for a list of sentences.
-
-        Args:
-            predictions: A list of lists of tuples containing the predicted word and its score.
-            n: The number of predictions to return.
-
-        Returns:
-            A list of tuples containing the predicted word and its score.
-        """
-        word_scores = {}
-
-        for prediction in predictions:
-            prediction = self.normalise_predictions(prediction)
-            for word, score in prediction:
-                if word in word_scores:
-                    word_scores[word] += score
-                else:
-                    word_scores[word] = score
-
-        # Return the first n words with the highest scores
-        return sorted(word_scores.items(), key=lambda x: x[1], reverse=True)[:n]
-
-    def normalise_predictions(self, predictions: list[tuple[str, float]]) -> list[tuple[str, float]]:
-        """
-        Normalise the scores of the predictions.
-
-        Args:
-            predictions: A list of tuples containing the predicted word and its score.
-
-        Returns:
-            A list of tuples containing the predicted word and its normalised score.
-        """
-        # Get the max score
-        max_score = max([score for _, score in predictions])
-
-        # Normalise the scores
-        return [(word, score / max_score) for word, score in predictions]
 
 
 class DistilBertBaseUncased(BaseMasking):
 
     def __init__(self):
+        super().__init__()
+
         from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 
         self.model = DistilBertForMaskedLM.from_pretrained("distilbert-base-uncased")
         self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
-    def predict_word(self, sentence: str or List[str], n: int = 5) -> List[tuple[str, float]]:
+    def predict_word(self, sentence, n=5):
 
         # Replace blank with <mask>
-        sentence = sentence.replace("____", "[MASK]")
+        sentence = self.normalise_sentence(sentence)
 
         # Tokenize the sentence
         input_ids = self.tokenizer(sentence, return_tensors="pt")["input_ids"]
@@ -142,18 +182,27 @@ class DistilBertBaseUncased(BaseMasking):
 
         return list(zip(top_n_words, top_n_scores.tolist()))
 
+    def normalise_sentence(self, sentence):
+        if isinstance(sentence, list):
+            return [s.replace('____', '[MASK]') for s in sentence]
+        else:
+            return sentence.replace('____', '[MASK]')
+
 
 class RobertaBase(LocalMaskingModel):
 
     def __init__(self):
+        super().__init__()
+
         from transformers import RobertaForMaskedLM, RobertaTokenizer
 
         self.model = RobertaForMaskedLM.from_pretrained("roberta-base")
         self.tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 
-    def predict_word(self, sentence: str or List[str], n: int = 5) -> List[tuple[str, float]]:
+    def predict_word(self, sentence: Union[str, List[str]], n: int = 5) -> List[tuple[str, float]]:
 
         # Replace blank with <mask>
+        sentence = self.normalise_sentence(sentence)
 
         # Tokenize the sentence
         input_ids = self.tokenizer(sentence, return_tensors="pt")["input_ids"]
@@ -171,3 +220,9 @@ class RobertaBase(LocalMaskingModel):
         top_n_words = [self.tokenizer.decode(token_id) for token_id in top_n_token_ids]
 
         return list(zip(top_n_words, top_n_scores.tolist()))
+
+    def normalise_sentence(self, sentence: Union[str, List[str]]) -> Union[str, List[str]]:
+        if isinstance(sentence, list):
+            return [s.replace('____', '<mask>') for s in sentence]
+        else:
+            return sentence.replace('____', '<mask>')
