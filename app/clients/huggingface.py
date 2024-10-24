@@ -33,4 +33,14 @@ class HuggingFaceClient:
         """
 
         response = requests.post(self.endpoint, headers=self.get_headers(), json={"inputs": sentence})
+
+        if response.status_code != 200:
+            # Try and get the error message from the response
+            try:
+                message = response.json()["error"]
+            except KeyError:
+                message = "An unknown error occurred"
+
+            raise ValueError(f"Failed to get predictions: {message}")
+
         return response.json()
