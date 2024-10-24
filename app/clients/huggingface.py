@@ -3,6 +3,8 @@ from urllib.parse import urljoin
 
 import requests
 
+from app.api.exceptions import ModelLoadingError
+
 
 class HuggingFaceClient:
     """
@@ -38,6 +40,9 @@ class HuggingFaceClient:
             # Try and get the error message from the response
             try:
                 message = response.json()["error"]
+                if "currently loading" in message:
+                    message = "Model is currently loading, please try again later"
+                    raise ModelLoadingError(message)
             except KeyError:
                 message = "An unknown error occurred"
 
