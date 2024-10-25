@@ -45,6 +45,8 @@ class HuggingFaceClient:
                     raise ModelLoadingError(message)
             except KeyError:
                 message = "An unknown error occurred"
+            except ModelLoadingError:
+                raise
 
             raise ValueError(f"Failed to get predictions: {message}")
 
