@@ -51,7 +51,7 @@ def handle_invalid_sentence_error(request, exc: InvalidSentenceError):
     )
 
 
-app.exception_handler(ModelLoadingError)
+@app.exception_handler(ModelLoadingError)
 def handle_model_loading_error(request, exc: ModelLoadingError):
     return JSONResponse(
         status_code=400,
