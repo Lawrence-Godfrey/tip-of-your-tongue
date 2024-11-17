@@ -1,3 +1,6 @@
+import boto3
+import json
+
 from abc import abstractmethod
 from typing import List, Union
 
@@ -16,6 +19,8 @@ def get_masked_language_model():
             os.getenv('HUGGINGFACE_API_KEY'),
             os.getenv('MODEL_NAME')
         )
+    elif os.getenv('MODEL_TYPE') == 'sagemaker':
+        return SageMakerModel(os.getenv('SAGEMAKER_ENDPOINT_NAME'))
     elif os.getenv('MODEL_TYPE') == 'local':
         return LocalMaskingModel().get_model_from_name(os.getenv('MODEL_NAME'))
     else:
@@ -106,6 +111,47 @@ class HuggingFaceModel(BaseMasking):
     def predict_word(self, sentence, n=5):
         hf_client = HuggingFaceClient(self.api_url, self.api_key, self.model_name)
         predictions = hf_client.predict_word(self.normalise_sentence(sentence))
+        return self.aggregate_predictions(predictions, n)
+
+    def normalise_sentence(self, sentence):
+        if isinstance(sentence, list):
+            return [s.replace('____', '[MASK]') for s in sentence]
+        else:
+            return sentence.replace('____', '[MASK]')
+
+    def aggregate_predictions(self, predictions: Union[List[dict], List[List[dict]]], n=5):
+        if not isinstance(predictions[0], list):
+            predictions = [predictions]
+
+        predictions = [[(p['token_str'], p['score']) for p in prediction] for prediction in predictions]
+
+        return super().aggregate_predictions(predictions, n)
+
+
+class SageMakerModel(BaseMasking):
+    """
+    This class interfaces with models deployed on AWS SageMaker.
+    """
+
+    def __init__(self, endpoint_name: str):
+        """
+        Args:
+            endpoint_name: The name of the SageMaker endpoint.
+        """
+        self.endpoint_name = endpoint_name
+
+        self.runtime = boto3.client('sagemaker-runtime')
+
+    def predict_word(self, sentence, n=5):
+        print(sentence)
+        response = self.runtime.invoke_endpoint(
+            EndpointName=self.endpoint_name,
+            ContentType="application/json",
+            Body=json.dumps({"inputs": self.normalise_sentence(sentence)}),
+        )
+
+        predictions = json.loads(response['Body'].read().decode())
+
         return self.aggregate_predictions(predictions, n)
 
     def normalise_sentence(self, sentence):
