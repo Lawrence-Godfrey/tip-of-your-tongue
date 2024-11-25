@@ -1,10 +1,13 @@
 import boto3
 import json
+import requests
 
 from abc import abstractmethod
 from typing import List, Union
+from urllib.parse import urljoin
 
 from app.clients.huggingface import HuggingFaceClient
+from gradio_client import Client
 
 
 def get_masked_language_model():
@@ -21,6 +24,10 @@ def get_masked_language_model():
         )
     elif os.getenv('MODEL_TYPE') == 'sagemaker':
         return SageMakerModel(os.getenv('SAGEMAKER_ENDPOINT_NAME'))
+
+    elif os.getenv('MODEL_TYPE') == 'gradio':
+        return GradioModel(os.getenv('GRADIO_URL'))
+
     elif os.getenv('MODEL_TYPE') == 'local':
         return LocalMaskingModel().get_model_from_name(os.getenv('MODEL_NAME'))
     else:
@@ -143,7 +150,6 @@ class SageMakerModel(BaseMasking):
         self.runtime = boto3.client('sagemaker-runtime')
 
     def predict_word(self, sentence, n=5):
-        print(sentence)
         response = self.runtime.invoke_endpoint(
             EndpointName=self.endpoint_name,
             ContentType="application/json",
@@ -165,6 +171,46 @@ class SageMakerModel(BaseMasking):
             predictions = [predictions]
 
         predictions = [[(p['token_str'], p['score']) for p in prediction] for prediction in predictions]
+
+        return super().aggregate_predictions(predictions, n)
+
+
+class GradioModel(BaseMasking):
+    """
+    This class interfaces with models deployed on Gradio.
+    """
+
+    def __init__(self, url: str):
+        """
+        Args:
+            url: The URL of the Gradio model. E.g. <username>/google-bert-bert-base-uncased.
+        """
+        self.url = url
+
+    def predict_word(self, sentences: Union[str, List[str]], n: int = 5) -> List[tuple[str, float]]:
+        if isinstance(sentences, str):
+            sentences = [sentences]
+
+        client = Client(self.url)
+
+        results = []
+
+        for sentence in sentences:
+            results.extend(client.predict(self.normalise_sentence(sentence), api_name='/predict')['confidences'])
+
+        return self.aggregate_predictions(results, n)
+
+    def normalise_sentence(self, sentence):
+        if isinstance(sentence, list):
+            return [s.replace('____', '[MASK]') for s in sentence]
+        else:
+            return [sentence.replace('____', '[MASK]')]
+
+    def aggregate_predictions(self, predictions: Union[List[dict], List[List[dict]]], n=5):
+        if not isinstance(predictions[0], list):
+            predictions = [predictions]
+
+        predictions = [[(p['label'], p['confidence']) for p in prediction] for prediction in predictions]
 
         return super().aggregate_predictions(predictions, n)
 
