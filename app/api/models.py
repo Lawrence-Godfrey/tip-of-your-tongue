@@ -1,7 +1,7 @@
 from pydantic import BaseModel, field_validator
 from typing import List
 
-from app.exceptions import InvalidSentenceError
+from app.api.exceptions import InvalidSentenceError
 
 
 class PredictionRequest(BaseModel):
@@ -23,3 +23,4 @@ class PredictionRequest(BaseModel):
 
 class PredictionResponse(BaseModel):
     words: List[tuple[str, float]]
+    sentences: List[str]

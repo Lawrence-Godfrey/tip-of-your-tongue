@@ -1,5 +1,11 @@
-fastapi
+fastapi~=0.115.5
 transformers
-torch
-pydantic
+torch~=2.2.0
+pydantic~=2.4.2
 uvicorn
+python-dotenv
+starlette~=0.40.0
+requests~=2.32.0
+boto==2.49.0
+sagemaker==2.233.0
+gradio==5.6.0
