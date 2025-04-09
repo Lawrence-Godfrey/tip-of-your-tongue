@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: project-config
+  namespace: default
+data:
+  PROJECT_ID: tip-of-your-tongue-dev

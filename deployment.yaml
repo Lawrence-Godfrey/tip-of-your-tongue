@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tip-of-your-tongue
+  labels:
+    app: tip-of-your-tongue
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tip-of-your-tongue
+  template:
+    metadata:
+      labels:
+        app: tip-of-your-tongue
+    spec:
+      containers:
+      - name: tip-of-your-tongue
+        image: gcr.io/YOUR_PROJECT_ID/tip-of-your-tongue:latest
+        ports:
+        - containerPort: 80
+        env:
+        - name: MODEL_TYPE
+          value: "gradio"
+        - name: MODEL_NAME
+          value: "bert-base-uncased"
+        - name: HUGGINGFACE_API_URL
+          value: "https://api-inference.huggingface.co/models/"
+        - name: GRADIO_URL
+          value: "lawrencegodfrey2/google-bert-bert-base-uncased"
+        - name: PROJECT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: project-config
+              key: PROJECT_ID
